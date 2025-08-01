@@ -1,18 +1,18 @@
-import React, { useReducer, useRef, useCallback, useEffect, useState } from "react";
+import { useReducer, useRef, useEffect, useCallback, useState } from "react";
 
-// Estado inicial
-const initialState = { count: 0, history: [] };
+// Recuperar historial de localStorage al iniciar
+const getInitialState = () => {
+  const storedHistory = localStorage.getItem("counterHistory");
+  return {
+    count: 0,
+    history: storedHistory ? JSON.parse(storedHistory) : [],
+  };
+};
 
-// Reducer con acciones: increment, incrementBy, decrement, undo, reset
+// Reducer para manejar acciones
 function reducer(state, action) {
   switch (action.type) {
     case "increment":
-      return {
-        count: state.count + 1,
-        history: [...state.history, `+1 (Nuevo valor: ${state.count + 1})`],
-      };
-
-    case "incrementBy":
       return {
         count: state.count + action.payload,
         history: [
@@ -20,133 +20,99 @@ function reducer(state, action) {
           `+${action.payload} (Nuevo valor: ${state.count + action.payload})`,
         ],
       };
-
     case "decrement":
       return {
         count: state.count - 1,
-        history: [...state.history, `-1 (Nuevo valor: ${state.count - 1})`],
+        history: [
+          ...state.history,
+          `-1 (Nuevo valor: ${state.count - 1})`,
+        ],
       };
-
+    case "reset":
+      return { count: 0, history: [] };
     case "undo": {
       if (state.history.length === 0) return state;
 
-      const lastAction = state.history[state.history.length - 1];
-      const updatedHistory = state.history.slice(0, -1);
-
-      let newCount = state.count;
-
-      const matched = lastAction.match(/([+-])(\d+)/);
-      if (matched) {
-        const [, sign, number] = matched;
-        const value = parseInt(number);
-        newCount = sign === "+" ? state.count - value : state.count + value;
-      }
+      const lastEntry = state.history[state.history.length - 1];
+      const valueMatch = lastEntry.match(/[+-]?\d+/);
+      const lastChange = valueMatch ? parseInt(valueMatch[0]) : 0;
 
       return {
-        count: newCount,
-        history: updatedHistory,
+        count: state.count - lastChange,
+        history: state.history.slice(0, -1),
       };
     }
-
-    case "reset":
-      return { count: 0, history: [] };
-
     default:
       return state;
   }
 }
 
-function CounterGame() {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const [inputValue, setInputValue] = useState(1);
+export default function CounterGame() {
+  const [state, dispatch] = useReducer(reducer, undefined, getInitialState);
+  const [incrementAmount, setIncrementAmount] = useState(1);
   const incrementBtnRef = useRef(null);
 
-  // Fijar el foco en el botón de incremento al montar
+  // Enfocar el botón "+" al cargar
   useEffect(() => {
-    incrementBtnRef.current.focus();
+    incrementBtnRef.current?.focus();
   }, []);
 
-  // Cargar historial y count desde localStorage al inicio
+  // Guardar historial en localStorage cuando cambie
   useEffect(() => {
-    const savedHistory = localStorage.getItem("contadorHistorial");
-    const savedCount = localStorage.getItem("contadorValor");
+    localStorage.setItem("counterHistory", JSON.stringify(state.history));
+  }, [state.history]);
 
-    if (savedHistory && savedCount !== null) {
-      dispatch({
-        type: "reset", // restablece primero
-      });
-      const parsedHistory = JSON.parse(savedHistory);
-      const parsedCount = parseInt(savedCount);
-      for (const entry of parsedHistory) {
-        const matched = entry.match(/([+-])(\d+)/);
-        if (matched) {
-          const [, sign, number] = matched;
-          const value = parseInt(number);
-          dispatch({
-            type: sign === "+" ? "incrementBy" : "decrement",
-            payload: value,
-          });
-        }
-      }
-    }
-  }, []);
-
-  // Guardar historial y contador en localStorage cuando cambien
-  useEffect(() => {
-    localStorage.setItem("contadorHistorial", JSON.stringify(state.history));
-    localStorage.setItem("contadorValor", state.count.toString());
-  }, [state]);
-
-  // Funciones memorizadas
+  // Funciones con useCallback
   const handleIncrement = useCallback(() => {
-    dispatch({ type: "increment" });
-  }, []);
-
-  const handleIncrementBy = useCallback(() => {
-    dispatch({ type: "incrementBy", payload: Number(inputValue) || 0 });
-  }, [inputValue]);
+    const value = Number(incrementAmount) || 1;
+    dispatch({ type: "increment", payload: value });
+  }, [incrementAmount]);
 
   const handleDecrement = useCallback(() => {
     dispatch({ type: "decrement" });
-  }, []);
-
-  const handleUndo = useCallback(() => {
-    dispatch({ type: "undo" });
   }, []);
 
   const handleReset = useCallback(() => {
     dispatch({ type: "reset" });
   }, []);
 
-  return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
-      <h2>Contador: {state.count}</h2>
+  const handleUndo = useCallback(() => {
+    dispatch({ type: "undo" });
+  }, []);
 
-      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-        <button ref={incrementBtnRef} onClick={handleIncrement}>+1</button>
-        <button onClick={handleDecrement}>-1</button>
+  return (
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+      <h1>Contador Interactivo</h1>
+      <h2>Valor actual: {state.count}</h2>
+
+      <div style={{ marginBottom: "1rem" }}>
+        <input
+          type="number"
+          value={incrementAmount}
+          onChange={(e) => setIncrementAmount(e.target.value)}
+          style={{
+            marginRight: "1rem",
+            width: "60px",
+            padding: "4px",
+            fontSize: "1rem",
+          }}
+        />
+        <button ref={incrementBtnRef} onClick={handleIncrement}>+</button>
+        <button onClick={handleDecrement}>-</button>
         <button onClick={handleUndo}>Deshacer</button>
         <button onClick={handleReset}>Reset</button>
       </div>
 
-      <div style={{ marginBottom: "20px" }}>
-        <input
-          type="number"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          style={{ width: "80px", marginRight: "8px" }}
-        />
-        <button onClick={handleIncrementBy}>+ Incrementar por</button>
-      </div>
-
       <h3>Historial de cambios:</h3>
-      <ul>
-        {state.history.map((entry, index) => (
-          <li key={index}>{entry}</li>
-        ))}
-      </ul>
+      {state.history.length === 0 ? (
+        <p>No hay historial aún.</p>
+      ) : (
+        <ul>
+          {state.history.map((entry, index) => (
+            <li key={index}>{entry}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
-
-export default CounterGame;
